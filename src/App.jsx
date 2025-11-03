@@ -1,233 +1,283 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Youtube, Mic, Book, TrendingUp, Clock, Target, LogOut, User } from 'lucide-react';
+"use client"
+
+import { useState, useEffect } from "react"
+import { Plus, Trash2, Youtube, Mic, Book, TrendingUp, Clock, Target, LogOut, User } from "lucide-react"
+import { meta } from "@eslint/js"
+import api from "./service/apiService"
 
 export default function ContentLearningTracker() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [skills, setSkills] = useState([]);
-  const [contents, setContents] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [activeTab, setActiveTab] = useState('skills');
-  const [newSkill, setNewSkill] = useState({ name: '', category: '', targetLevel: 'Intermediate', currentLevel: 'Beginner' });
-  const [newContent, setNewContent] = useState({ title: '', creator: '', type: 'youtube', skillId: '', url: '', status: 'to-watch' });
-  const [newSession, setNewSession] = useState({ contentId: '', date: '', duration: '', notes: '' });
+  const [currentUser, setCurrentUser] = useState(null)
+  const [loginForm, setLoginForm] = useState({ username: "", password: "" })
+  const [isRegistering, setIsRegistering] = useState(false)
+  const [skills, setSkills] = useState([])
+  const [contents, setContents] = useState([])
+  const [sessions, setSessions] = useState([])
+  const [activeTab, setActiveTab] = useState("skills")
+  const [newSkill, setNewSkill] = useState({
+    name: "",
+    category: "",
+    targetLevel: "Intermediate",
+    currentLevel: "Beginner",
+  })
+  const [newContent, setNewContent] = useState({
+    title: "",
+    creator: "",
+    type: "youtube",
+    skillId: "",
+    url: "",
+    status: "to-watch",
+  })
+  const [newSession, setNewSession] = useState({ contentId: "", date: "", duration: "", notes: "" })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    checkLoggedInUser();
-  }, []);
+    checkLoggedInUser()
+  }, [])
 
   useEffect(() => {
     if (currentUser) {
-      loadUserData();
+      loadUserData()
     }
-  }, [currentUser]);
+  }, [currentUser])
 
-  const checkLoggedInUser = () => {
+  const checkLoggedInUser = async () => {
     try {
-      const userData = localStorage.getItem('current-user');
-      if (userData) {
-        setCurrentUser(JSON.parse(userData));
+      const token = localStorage.getItem("auth-token")
+      if (token) {
+        const userData = await api.get("/auth/me")
+        setCurrentUser(userData)
       }
     } catch (error) {
-      console.log('No user logged in');
+      console.error("Auth check error:", error)
+      localStorage.removeItem("auth-token")
     }
-  };
+  }
 
-  const loadUserData = () => {
-    if (!currentUser) return;
-    
+  const loadUserData = async () => {
+    if (!currentUser) return
+
     try {
-      const skillsData = localStorage.getItem(`skills-${currentUser.username}`);
-      const contentsData = localStorage.getItem(`contents-${currentUser.username}`);
-      const sessionsData = localStorage.getItem(`sessions-${currentUser.username}`);
-      
-      if (skillsData) setSkills(JSON.parse(skillsData));
-      if (contentsData) setContents(JSON.parse(contentsData));
-      if (sessionsData) setSessions(JSON.parse(sessionsData));
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-  };
+      setLoading(true)
 
-  const saveData = (type, data) => {
-    if (!currentUser) return;
-    
-    try {
-      localStorage.setItem(`${type}-${currentUser.username}`, JSON.stringify(data));
-    } catch (error) {
-      console.error('Error saving data:', error);
-    }
-  };
+      const [skillsData, contentsData, sessionsData] = await Promise.all([
+        api.get("/skills"),
+        api.get("/contents"),
+        api.get("/sessions"),
+      ])
 
-  const handleLogin = () => {
+      setSkills(skillsData)
+      setContents(contentsData)
+      setSessions(sessionsData)
+    } catch (error) {
+      console.error("Error loading data:", error)
+      setError("Failed to load data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleLogin = async () => {
     if (!loginForm.username.trim() || !loginForm.password.trim()) {
-      alert('Please enter username and password');
-      return;
+      setError("Please enter username and password")
+      return
     }
 
     try {
-      const userKey = `user-${loginForm.username}`;
-      const userData = localStorage.getItem(userKey);
-      
-      if (userData) {
-        const user = JSON.parse(userData);
-        if (user.password === loginForm.password) {
-          const currentUserData = { username: loginForm.username };
-          setCurrentUser(currentUserData);
-          localStorage.setItem('current-user', JSON.stringify(currentUserData));
-          setLoginForm({ username: '', password: '' });
-        } else {
-          alert('Invalid password');
-        }
-      } else {
-        alert('User not found. Please register.');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      alert('Login failed');
-    }
-  };
-
-  const handleRegister = () => {
-    if (!loginForm.username.trim() || !loginForm.password.trim()) {
-      alert('Please enter username and password');
-      return;
-    }
-
-    try {
-      const userKey = `user-${loginForm.username}`;
-      const existing = localStorage.getItem(userKey);
-      
-      if (existing) {
-        alert('Username already exists');
-        return;
-      }
-
-      localStorage.setItem(userKey, JSON.stringify({
+      setLoading(true)
+      setError("")
+      const data = await api.post("/auth/login", {
         username: loginForm.username,
         password: loginForm.password,
-        createdAt: new Date().toISOString()
-      }));
+      })
 
-      const user = { username: loginForm.username };
-      setCurrentUser(user);
-      localStorage.setItem('current-user', JSON.stringify(user));
-      setLoginForm({ username: '', password: '' });
-      setIsRegistering(false);
+      localStorage.setItem("auth-token", data.token)
+      setCurrentUser(data.user)
+      setLoginForm({ username: "", password: "" })
     } catch (error) {
-      console.error('Registration error:', error);
-      alert('Registration failed');
+      console.error("Login error:", error)
+      setError(error.response?.data?.message || "Login failed")
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
-  const handleLogout = () => {
+  const handleRegister = async () => {
+    if (!loginForm.username.trim() || !loginForm.password.trim()) {
+      setError("Please enter username and password")
+      return
+    }
+
     try {
-      localStorage.removeItem('current-user');
-      setCurrentUser(null);
-      setSkills([]);
-      setContents([]);
-      setSessions([]);
+      setLoading(true)
+      setError("")
+      const data = await api.post("/auth/register", loginForm)
+
+      localStorage.setItem("auth-token", data.token)
+      setCurrentUser(data.user)
+      setLoginForm({ username: "", password: "" })
+      setIsRegistering(false)
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Registration error:", error)
+      setError(error.response?.data?.message || "Registration failed")
+    } finally {
+      setLoading(false)
     }
-  };
+  }
+
+  const handleLogout = async () => {
+    try {
+      await api.post("/auth/logout")
+      localStorage.removeItem("auth-token")
+      setCurrentUser(null)
+      setSkills([])
+      setContents([])
+      setSessions([])
+    } catch (error) {
+      console.error("Logout error:", error)
+      // Still clear local state even if API call fails
+      localStorage.removeItem("auth-token")
+      setCurrentUser(null)
+      setSkills([])
+      setContents([])
+      setSessions([])
+    }
+  }
 
   const extractYouTubeId = (url) => {
-    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[7].length === 11) ? match[7] : null;
-  };
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/
+    const match = url.match(regExp)
+    return match && match[7].length === 11 ? match[7] : null
+  }
 
   const getYouTubeThumbnail = (url) => {
-    const videoId = extractYouTubeId(url);
-    return videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
-  };
+    const videoId = extractYouTubeId(url)
+    return videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null
+  }
 
-  const addSkill = () => {
+  const addSkill = async () => {
     if (newSkill.name.trim()) {
-      const skill = { ...newSkill, id: Date.now().toString(), createdAt: new Date().toISOString() };
-      const updated = [...skills, skill];
-      setSkills(updated);
-      saveData('skills', updated);
-      setNewSkill({ name: '', category: '', targetLevel: 'Intermediate', currentLevel: 'Beginner' });
+      try {
+        setError("")
+        const skill = await api.post("/skills", newSkill)
+        setSkills([...skills, skill])
+        setNewSkill({ name: "", category: "", targetLevel: "Intermediate", currentLevel: "Beginner" })
+      } catch (error) {
+        console.error("Error adding skill:", error)
+        setError("Failed to add skill")
+      }
     }
-  };
+  }
 
-  const deleteSkill = (id) => {
-    const updated = skills.filter(s => s.id !== id);
-    setSkills(updated);
-    saveData('skills', updated);
-  };
+  const deleteSkill = async (id) => {
+    try {
+      setError("")
+      await api.delete(`/skills/${id}`)
+      setSkills(skills.filter((s) => s._id !== id))
+    } catch (error) {
+      console.error("Error deleting skill:", error)
+      setError("Failed to delete skill")
+    }
+  }
 
-  const updateSkillLevel = (id, level) => {
-    const updated = skills.map(s => s.id === id ? { ...s, currentLevel: level } : s);
-    setSkills(updated);
-    saveData('skills', updated);
-  };
+  const updateSkillLevel = async (id, level) => {
+    try {
+      setError("")
+      await api.put(`/skills/${id}`, { currentLevel: level })
+      const updated = skills.map((s) => (s._id === id ? { ...s, currentLevel: level } : s))
+      setSkills(updated)
+    } catch (error) {
+      console.error("Error updating skill:", error)
+      setError("Failed to update skill")
+    }
+  }
 
-  const addContent = () => {
+  const addContent = async () => {
     if (newContent.title.trim() && newContent.skillId) {
-      const content = { 
-        ...newContent, 
-        id: Date.now().toString(), 
-        addedAt: new Date().toISOString(),
-        thumbnail: newContent.type === 'youtube' && newContent.url ? getYouTubeThumbnail(newContent.url) : null
-      };
-      const updated = [...contents, content];
-      setContents(updated);
-      saveData('contents', updated);
-      setNewContent({ title: '', creator: '', type: 'youtube', skillId: '', url: '', status: 'to-watch' });
+      try {
+        setError("")
+        const contentData = {
+          ...newContent,
+          thumbnail: newContent.type === "youtube" && newContent.url ? getYouTubeThumbnail(newContent.url) : null,
+        }
+
+        const content = await api.post("/contents", contentData)
+        setContents([...contents, content])
+        setNewContent({ title: "", creator: "", type: "youtube", skillId: "", url: "", status: "to-watch" })
+      } catch (error) {
+        console.error("Error adding content:", error)
+        setError("Failed to add content")
+      }
     }
-  };
+  }
 
-  const deleteContent = (id) => {
-    const updated = contents.filter(c => c.id !== id);
-    setContents(updated);
-    saveData('contents', updated);
-  };
+  const deleteContent = async (id) => {
+    try {
+      setError("")
+      await api.delete(`/contents/${id}`)
+      setContents(contents.filter((c) => c._id !== id))
+    } catch (error) {
+      console.error("Error deleting content:", error)
+      setError("Failed to delete content")
+    }
+  }
 
-  const updateContentStatus = (id, status) => {
-    const updated = contents.map(c => c.id === id ? { ...c, status } : c);
-    setContents(updated);
-    saveData('contents', updated);
-  };
+  const updateContentStatus = async (id, status) => {
+    try {
+      setError("")
+      await api.put(`/contents/${id}`, { status })
+      const updated = contents.map((c) => (c._id === id ? { ...c, status } : c))
+      setContents(updated)
+    } catch (error) {
+      console.error("Error updating content:", error)
+      setError("Failed to update content")
+    }
+  }
 
-  const addSession = () => {
+  const addSession = async () => {
     if (newSession.contentId && newSession.date && newSession.duration) {
-      const session = { ...newSession, id: Date.now().toString() };
-      const updated = [...sessions, session];
-      setSessions(updated);
-      saveData('sessions', updated);
-      setNewSession({ contentId: '', date: '', duration: '', notes: '' });
+      try {
+        setError("")
+        const session = await api.post("/sessions", newSession)
+        setSessions([...sessions, session])
+        setNewSession({ contentId: "", date: "", duration: "", notes: "" })
+      } catch (error) {
+        console.error("Error adding session:", error)
+        setError("Failed to add session")
+      }
     }
-  };
+  }
 
-  const deleteSession = (id) => {
-    const updated = sessions.filter(s => s.id !== id);
-    setSessions(updated);
-    saveData('sessions', updated);
-  };
+  const deleteSession = async (id) => {
+    try {
+      setError("")
+      await api.delete(`/sessions/${id}`)
+      setSessions(sessions.filter((s) => s._id !== id))
+    } catch (error) {
+      console.error("Error deleting session:", error)
+      setError("Failed to delete session")
+    }
+  }
 
   const getSkillProgress = (skillId) => {
-    const skillContents = contents.filter(c => c.skillId === skillId);
-    const completed = skillContents.filter(c => c.status === 'completed').length;
-    const total = skillContents.length;
-    return { completed, total, percentage: total > 0 ? (completed / total) * 100 : 0 };
-  };
+    const skillContents = contents.filter((c) => c.skillId === skillId)
+    const completed = skillContents.filter((c) => c.status === "completed").length
+    const total = skillContents.length
+    return { completed, total, percentage: total > 0 ? (completed / total) * 100 : 0 }
+  }
 
   const getSkillSessions = (skillId) => {
-    const skillContents = contents.filter(c => c.skillId === skillId).map(c => c.id);
-    return sessions.filter(s => skillContents.includes(s.contentId));
-  };
+    const skillContents = contents.filter((c) => c.skillId === skillId).map((c) => c._id)
+    return sessions.filter((s) => skillContents.includes(s.contentId))
+  }
 
   const getTotalLearningTime = (skillId) => {
-    const skillSessions = getSkillSessions(skillId);
-    return skillSessions.reduce((total, s) => total + parseInt(s.duration || 0), 0);
-  };
+    const skillSessions = getSkillSessions(skillId)
+    return skillSessions.reduce((total, s) => total + Number.parseInt(s.duration || 0), 0)
+  }
 
-  const levels = ['Beginner', 'Elementary', 'Intermediate', 'Advanced', 'Expert'];
-  const categories = ['Programming', 'Design', 'Language', 'Business', 'Creative', 'Science', 'Other'];
+  const levels = ["Beginner", "Elementary", "Intermediate", "Advanced", "Expert"]
+  const categories = ["Programming", "Design", "Language", "Business", "Creative", "Science", "Other"]
 
   if (!currentUser) {
     return (
@@ -241,35 +291,41 @@ export default function ContentLearningTracker() {
             <p className="text-gray-600">Track your learning journey</p>
           </div>
 
+          {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg text-sm">{error}</div>}
+
           <div className="space-y-4">
             <input
               type="text"
               placeholder="Username"
               value={loginForm.username}
               onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-              onKeyPress={(e) => e.key === 'Enter' && (isRegistering ? handleRegister() : handleLogin())}
+              onKeyPress={(e) => e.key === "Enter" && (isRegistering ? handleRegister() : handleLogin())}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              disabled={loading}
             />
             <input
               type="password"
               placeholder="Password"
               value={loginForm.password}
               onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              onKeyPress={(e) => e.key === 'Enter' && (isRegistering ? handleRegister() : handleLogin())}
+              onKeyPress={(e) => e.key === "Enter" && (isRegistering ? handleRegister() : handleLogin())}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              disabled={loading}
             />
-            
+
             {isRegistering ? (
               <>
                 <button
                   onClick={handleRegister}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg disabled:opacity-50"
                 >
-                  Create Account
+                  {loading ? "Creating Account..." : "Create Account"}
                 </button>
                 <button
                   onClick={() => setIsRegistering(false)}
-                  className="w-full text-gray-600 py-2 hover:text-gray-800"
+                  disabled={loading}
+                  className="w-full text-gray-600 py-2 hover:text-gray-800 disabled:opacity-50"
                 >
                   Already have an account? Login
                 </button>
@@ -278,13 +334,15 @@ export default function ContentLearningTracker() {
               <>
                 <button
                   onClick={handleLogin}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg disabled:opacity-50"
                 >
-                  Login
+                  {loading ? "Logging in..." : "Login"}
                 </button>
                 <button
                   onClick={() => setIsRegistering(true)}
-                  className="w-full text-gray-600 py-2 hover:text-gray-800"
+                  disabled={loading}
+                  className="w-full text-gray-600 py-2 hover:text-gray-800 disabled:opacity-50"
                 >
                   Don't have an account? Register
                 </button>
@@ -293,12 +351,14 @@ export default function ContentLearningTracker() {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
       <div className="max-w-7xl mx-auto">
+        {error && <div className="mb-4 p-4 bg-red-100 text-red-700 rounded-lg">{error}</div>}
+
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
           <div className="flex justify-between items-center">
             <div>
@@ -325,27 +385,29 @@ export default function ContentLearningTracker() {
 
         <div className="flex gap-4 mb-6">
           <button
-            onClick={() => setActiveTab('skills')}
+            onClick={() => setActiveTab("skills")}
             className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
-              activeTab === 'skills' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'
+              activeTab === "skills" ? "bg-indigo-600 text-white shadow-lg" : "bg-white text-gray-700 hover:bg-gray-50"
             }`}
           >
             <Target size={20} />
             Skills ({skills.length})
           </button>
           <button
-            onClick={() => setActiveTab('content')}
+            onClick={() => setActiveTab("content")}
             className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
-              activeTab === 'content' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'
+              activeTab === "content" ? "bg-indigo-600 text-white shadow-lg" : "bg-white text-gray-700 hover:bg-gray-50"
             }`}
           >
             <Book size={20} />
             Content ({contents.length})
           </button>
           <button
-            onClick={() => setActiveTab('sessions')}
+            onClick={() => setActiveTab("sessions")}
             className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
-              activeTab === 'sessions' ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-gray-700 hover:bg-gray-50'
+              activeTab === "sessions"
+                ? "bg-indigo-600 text-white shadow-lg"
+                : "bg-white text-gray-700 hover:bg-gray-50"
             }`}
           >
             <TrendingUp size={20} />
@@ -353,7 +415,7 @@ export default function ContentLearningTracker() {
           </button>
         </div>
 
-        {activeTab === 'skills' && (
+        {activeTab === "skills" && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Add New Skill</h2>
@@ -371,25 +433,38 @@ export default function ContentLearningTracker() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
                   <option value="">Select category</option>
-                  {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
                 </select>
                 <select
                   value={newSkill.currentLevel}
                   onChange={(e) => setNewSkill({ ...newSkill, currentLevel: e.target.value })}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
-                  {levels.map(lvl => <option key={lvl} value={lvl}>Current: {lvl}</option>)}
+                  {levels.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      Current: {lvl}
+                    </option>
+                  ))}
                 </select>
                 <select
                   value={newSkill.targetLevel}
                   onChange={(e) => setNewSkill({ ...newSkill, targetLevel: e.target.value })}
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 >
-                  {levels.map(lvl => <option key={lvl} value={lvl}>Target: {lvl}</option>)}
+                  {levels.map((lvl) => (
+                    <option key={lvl} value={lvl}>
+                      Target: {lvl}
+                    </option>
+                  ))}
                 </select>
                 <button
                   onClick={addSkill}
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Plus size={20} />
                   Add Skill
@@ -398,13 +473,13 @@ export default function ContentLearningTracker() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {skills.map(skill => {
-                const progress = getSkillProgress(skill.id);
-                const totalTime = getTotalLearningTime(skill.id);
-                const sessionsCount = getSkillSessions(skill.id).length;
-                
+              {skills.map((skill) => {
+                const progress = getSkillProgress(skill._id)
+                const totalTime = getTotalLearningTime(skill._id)
+                const sessionsCount = getSkillSessions(skill._id).length
+
                 return (
-                  <div key={skill.id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+                  <div key={skill._id} className="bg-white rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex-1">
                         <h3 className="text-xl font-bold text-gray-800">{skill.name}</h3>
@@ -413,8 +488,9 @@ export default function ContentLearningTracker() {
                         </span>
                       </div>
                       <button
-                        onClick={() => deleteSkill(skill.id)}
-                        className="text-red-500 hover:text-red-700 p-2"
+                        onClick={() => deleteSkill(skill._id)}
+                        disabled={loading}
+                        className="text-red-500 hover:text-red-700 p-2 disabled:opacity-50"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -427,17 +503,24 @@ export default function ContentLearningTracker() {
                       </div>
                       <select
                         value={skill.currentLevel}
-                        onChange={(e) => updateSkillLevel(skill.id, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                        onChange={(e) => updateSkillLevel(skill._id, e.target.value)}
+                        disabled={loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                       >
-                        {levels.map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
+                        {levels.map((lvl) => (
+                          <option key={lvl} value={lvl}>
+                            {lvl}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
                     <div className="mb-3">
                       <div className="flex justify-between text-sm text-gray-600 mb-1">
                         <span>Content Progress</span>
-                        <span>{progress.completed}/{progress.total} completed</span>
+                        <span>
+                          {progress.completed}/{progress.total} completed
+                        </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
@@ -458,13 +541,13 @@ export default function ContentLearningTracker() {
                       </div>
                     </div>
                   </div>
-                );
+                )
               })}
             </div>
           </div>
         )}
 
-        {activeTab === 'content' && (
+        {activeTab === "content" && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Add New Content</h2>
@@ -501,7 +584,11 @@ export default function ContentLearningTracker() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select skill</option>
-                  {skills.map(skill => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+                  {skills.map((skill) => (
+                    <option key={skill._id} value={skill._id}>
+                      {skill.name}
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="url"
@@ -512,7 +599,8 @@ export default function ContentLearningTracker() {
                 />
                 <button
                   onClick={addContent}
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Plus size={20} />
                   Add Content
@@ -521,67 +609,72 @@ export default function ContentLearningTracker() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {contents.map(content => {
-                const skill = skills.find(s => s.id === content.skillId);
-                const contentSessions = sessions.filter(s => s.contentId === content.id);
-                
+              {contents.map((content) => {
+                const skill = skills.find((s) => s._id === content.skillId)
+                const contentSessions = sessions.filter((s) => s.contentId === content._id)
+
                 return (
-                  <div key={content.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-shadow">
+                  <div
+                    key={content._id}
+                    className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-shadow"
+                  >
                     {content.thumbnail ? (
                       <div className="relative">
-                        <img 
-                          src={content.thumbnail} 
+                        <img
+                          src={content.thumbnail || "/placeholder.svg"}
                           alt={content.title}
                           className="w-full h-48 object-cover"
                           onError={(e) => {
-                            e.target.style.display = 'none';
+                            e.target.style.display = "none"
                           }}
                         />
                         <div className="absolute top-2 right-2 p-2 bg-black bg-opacity-70 rounded-lg">
-                          {content.type === 'youtube' && <Youtube className="text-red-500" size={20} />}
+                          {content.type === "youtube" && <Youtube className="text-red-500" size={20} />}
                         </div>
                       </div>
                     ) : (
                       <div className="h-48 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                        {content.type === 'youtube' && <Youtube className="text-white" size={48} />}
-                        {content.type === 'podcast' && <Mic className="text-white" size={48} />}
-                        {content.type === 'course' && <Book className="text-white" size={48} />}
-                        {content.type === 'article' && <Book className="text-white" size={48} />}
+                        {content.type === "youtube" && <Youtube className="text-white" size={48} />}
+                        {content.type === "podcast" && <Mic className="text-white" size={48} />}
+                        {content.type === "course" && <Book className="text-white" size={48} />}
+                        {content.type === "article" && <Book className="text-white" size={48} />}
                       </div>
                     )}
-                    
+
                     <div className="p-4">
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="text-lg font-bold text-gray-800 line-clamp-2">{content.title}</h3>
                         <button
-                          onClick={() => deleteContent(content.id)}
-                          className="text-red-500 hover:text-red-700 p-1 flex-shrink-0"
+                          onClick={() => deleteContent(content._id)}
+                          disabled={loading}
+                          className="text-red-500 hover:text-red-700 p-1 flex-shrink-0 disabled:opacity-50"
                         >
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      
+
                       <p className="text-gray-600 text-sm mb-3">by {content.creator}</p>
-                      
+
                       <div className="flex gap-2 mb-3">
                         <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                          {skill?.name || 'No skill'}
+                          {skill?.name || "No skill"}
                         </span>
                         <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">
                           {contentSessions.length} sessions
                         </span>
                       </div>
-                      
+
                       <select
                         value={content.status}
-                        onChange={(e) => updateContentStatus(content.id, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 mb-2"
+                        onChange={(e) => updateContentStatus(content._id, e.target.value)}
+                        disabled={loading}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 mb-2 disabled:opacity-50"
                       >
                         <option value="to-watch">To Watch</option>
                         <option value="in-progress">In Progress</option>
                         <option value="completed">Completed</option>
                       </select>
-                      
+
                       {content.url && (
                         <a
                           href={content.url}
@@ -594,13 +687,13 @@ export default function ContentLearningTracker() {
                       )}
                     </div>
                   </div>
-                );
+                )
               })}
             </div>
           </div>
         )}
 
-        {activeTab === 'sessions' && (
+        {activeTab === "sessions" && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Log Learning Session</h2>
@@ -611,9 +704,9 @@ export default function ContentLearningTracker() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select content</option>
-                  {contents.map(content => (
-                    <option key={content.id} value={content.id}>
-                      {content.title} ({skills.find(s => s.id === content.skillId)?.name})
+                  {contents.map((content) => (
+                    <option key={content._id} value={content._id}>
+                      {content.title} ({skills.find((s) => s._id === content.skillId)?.name})
                     </option>
                   ))}
                 </select>
@@ -640,7 +733,8 @@ export default function ContentLearningTracker() {
               />
               <button
                 onClick={addSession}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2"
+                disabled={loading}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2 disabled:opacity-50"
               >
                 <Plus size={20} />
                 Log Session
@@ -648,26 +742,27 @@ export default function ContentLearningTracker() {
             </div>
 
             <div className="grid grid-cols-1 gap-4">
-              {sessions.map(session => {
-                const content = contents.find(c => c.id === session.contentId);
-                const skill = skills.find(s => s.id === content?.skillId);
-                
+              {sessions.map((session) => {
+                const content = contents.find((c) => c._id === session.contentId)
+                const skill = skills.find((s) => s._id === content?.skillId)
+
                 return (
-                  <div key={session.id} className="bg-white rounded-xl shadow-lg p-6">
+                  <div key={session._id} className="bg-white rounded-xl shadow-lg p-6">
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <h3 className="text-lg font-bold text-gray-800">{content?.title || 'Unknown content'}</h3>
+                        <h3 className="text-lg font-bold text-gray-800">{content?.title || "Unknown content"}</h3>
                         <div className="flex gap-2 mt-1">
                           <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs">
-                            {skill?.name || 'No skill'}
+                            {skill?.name || "No skill"}
                           </span>
                           <span className="text-gray-600 text-sm">{session.date}</span>
                           <span className="text-gray-600 text-sm">• {session.duration} min</span>
                         </div>
                       </div>
                       <button
-                        onClick={() => deleteSession(session.id)}
-                        className="text-red-500 hover:text-red-700 p-2"
+                        onClick={() => deleteSession(session._id)}
+                        disabled={loading}
+                        className="text-red-500 hover:text-red-700 p-2 disabled:opacity-50"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -678,12 +773,12 @@ export default function ContentLearningTracker() {
                       </div>
                     )}
                   </div>
-                );
+                )
               })}
             </div>
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }
